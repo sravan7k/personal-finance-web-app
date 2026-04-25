@@ -1,0 +1,5 @@
+node_modules/
+finance.db
+CHAT_HISTORY.md
+.DS_Store
+*.log
