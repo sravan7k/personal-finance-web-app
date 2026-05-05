@@ -61,8 +61,20 @@ async function refreshList() {
   renderTransactions(transactions);
 }
 
+async function refreshLatestEmail() {
+  try {
+    const data = await fetch('/api/last-email').then(r => r.json());
+    document.getElementById('latest-email-subject').textContent = data.subject || '(no subject)';
+    document.getElementById('latest-email-meta').textContent = data.from
+      ? `${data.from}  ·  ${data.date}`
+      : '';
+  } catch {
+    document.getElementById('latest-email-subject').textContent = 'Unable to load';
+  }
+}
+
 async function refreshAll() {
-  await Promise.all([refreshDashboard(), refreshList()]);
+  await Promise.all([refreshDashboard(), refreshList(), refreshLatestEmail()]);
 }
 
 // ── Add Transaction ───────────────────────────────────────────────────────────

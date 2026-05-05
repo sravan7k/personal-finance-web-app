@@ -3,3 +3,8 @@ finance.db
 CHAT_HISTORY.md
 .DS_Store
 *.log
+
+# Gmail agent secrets — never commit these
+.env
+gmail-agent/accounts/
+gmail-agent/config.json

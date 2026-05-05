@@ -72,6 +72,33 @@ body {
 #card-expenses .card-value { color: var(--red); }
 #card-balance .card-value.negative { color: var(--red); }
 
+/* Latest Email */
+.latest-email-section {
+  margin-bottom: 28px;
+}
+.latest-email-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.latest-email-subject {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.latest-email-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* Form section */
 .form-section {
   background: var(--surface);
