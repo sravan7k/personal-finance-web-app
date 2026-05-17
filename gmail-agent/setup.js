@@ -112,8 +112,8 @@ async function setup(email) {
   fs.writeFileSync(tokenPath, JSON.stringify(tokens, null, 2));
 
   console.log(`\nToken saved to:\n  ${tokenPath}`);
-  console.log(`\nSetup complete! The agent will scan ${email} daily at 9 AM.`);
-  console.log('To run it immediately: npm run gmail:run');
+  console.log(`\nSetup complete! The agent will scan ${email} on every server start.`);
+  console.log('To run it immediately: node -e "require(\'./gmail-agent/agent\').runAgent()"');
 }
 
 setup(process.argv[2]).catch((err) => {

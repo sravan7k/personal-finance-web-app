@@ -21,6 +21,9 @@ Rules:
   { "isTransaction": boolean, "type": "income"|"expense", "amount": number, "category": string, "date": "YYYY-MM-DD", "note": string }
 - Omit fields other than isTransaction when isTransaction is false`;
 
+const POLL_INTERVAL_MS = 10_000;
+const POLL_TIMEOUT_MS = 30 * 60 * 1000;
+
 let _client = null;
 
 function client() {
@@ -32,35 +35,73 @@ function client() {
   return _client;
 }
 
-async function classifyEmail(email) {
-  const content = [
+function formatEmailContent(email) {
+  return [
     `From: ${email.from}`,
     `Subject: ${email.subject}`,
     `Date: ${email.date}`,
     '',
     email.body,
   ].join('\n');
+}
 
-  const response = await client().messages.create({
-    model: 'claude-haiku-4-5',
-    max_tokens: 300,
-    system: [
-      {
-        type: 'text',
-        text: SYSTEM_PROMPT,
-        cache_control: { type: 'ephemeral' }, // cached across all 714 calls
-      },
-    ],
-    messages: [{ role: 'user', content }],
-  });
-
-  const text = response.content[0]?.type === 'text' ? response.content[0].text.trim() : '';
-
+function parseResult(text) {
   try {
-    return JSON.parse(text);
+    const clean = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+    return JSON.parse(clean);
   } catch {
     return { isTransaction: false };
   }
 }
 
-module.exports = { classifyEmail };
+async function classifyEmailsBatch(emails) {
+  if (emails.length === 0) return new Map();
+
+  const batch = await client().messages.batches.create({
+    requests: emails.map((email) => ({
+      custom_id: email.id,
+      params: {
+        model: 'claude-haiku-4-5',
+        max_tokens: 300,
+        system: [
+          {
+            type: 'text',
+            text: SYSTEM_PROMPT,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+        messages: [{ role: 'user', content: formatEmailContent(email) }],
+      },
+    })),
+  });
+
+  console.log(`[Gmail Agent] Batch ${batch.id} submitted (${emails.length} emails)`);
+
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  let status = batch;
+  while (status.processing_status === 'in_progress') {
+    if (Date.now() > deadline) throw new Error(`Batch ${batch.id} timed out after 30 minutes`);
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    status = await client().messages.batches.retrieve(batch.id);
+    console.log(
+      `[Gmail Agent] Batch ${batch.id}: ${status.request_counts.processing} processing, ` +
+      `${status.request_counts.succeeded} succeeded, ${status.request_counts.errored} errored`
+    );
+  }
+
+  const results = new Map();
+  for await (const item of await client().messages.batches.results(batch.id)) {
+    if (item.result.type === 'succeeded') {
+      const text = item.result.message.content[0]?.type === 'text'
+        ? item.result.message.content[0].text
+        : '';
+      results.set(item.custom_id, parseResult(text));
+    } else {
+      results.set(item.custom_id, { isTransaction: false });
+    }
+  }
+
+  return results;
+}
+
+module.exports = { classifyEmailsBatch };

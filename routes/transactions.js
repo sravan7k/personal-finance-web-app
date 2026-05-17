@@ -2,12 +2,27 @@ const express = require('express');
 const db = require('../db');
 const router = express.Router();
 
-// GET all transactions (newest first)
-router.get('/', (_req, res) => {
-  const rows = db.prepare(
-    'SELECT * FROM transactions ORDER BY date DESC, created_at DESC'
-  ).all();
-  res.json(rows);
+// GET transactions — optional ?year=&month=&category=&type=
+router.get('/', (req, res) => {
+  const { year, month, category, type } = req.query;
+  let query = 'SELECT * FROM transactions WHERE 1=1';
+  const params = [];
+
+  if (year && month) {
+    query += " AND strftime('%Y', date) = ? AND strftime('%m', date) = ?";
+    params.push(String(year), String(month).padStart(2, '0'));
+  }
+  if (category && category !== 'all') {
+    query += ' AND category = ?';
+    params.push(category);
+  }
+  if (type && ['income', 'expense'].includes(type)) {
+    query += ' AND type = ?';
+    params.push(type);
+  }
+  query += ' ORDER BY date DESC, created_at DESC';
+
+  res.json(db.prepare(query).all(...params));
 });
 
 // POST new transaction

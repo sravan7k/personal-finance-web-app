@@ -105,36 +105,64 @@ function parseMessage(msg) {
   };
 }
 
-async function fetchEmailsForAccount(email, afterDate) {
-  const auth = buildAuth(email);
-  const gmail = google.gmail({ version: 'v1', auth });
+function buildQuery(afterDate, filters = {}) {
+  const { senderDomains = [], subjectKeywords = [] } = filters;
 
-  const query = `after:${gmailDateQuery(afterDate)}`;
-  const emails = [];
+  const fromTerms = senderDomains.map((d) => `from:${d}`);
+  const subjectTerms = subjectKeywords.map((k) => `subject:"${k}"`);
+  const allTerms = [...fromTerms, ...subjectTerms];
+
+  const filterClause = allTerms.length > 0 ? ` {${allTerms.join(' ')}}` : '';
+  return `after:${gmailDateQuery(afterDate)}${filterClause}`;
+}
+
+const FETCH_CONCURRENCY = 10;
+const FIELDS = 'id,payload(mimeType,headers,body/data,parts(mimeType,body/data,parts(mimeType,body/data,parts(mimeType,body/data))))';
+
+async function fetchMessageDetails(gmailClient, ids) {
+  const results = [];
+  for (let i = 0; i < ids.length; i += FETCH_CONCURRENCY) {
+    const chunk = ids.slice(i, i + FETCH_CONCURRENCY);
+    const fetched = await Promise.all(
+      chunk.map((id) =>
+        gmailClient.users.messages.get({ userId: 'me', id, format: 'full', fields: FIELDS })
+          .then((res) => parseMessage(res.data))
+      )
+    );
+    results.push(...fetched);
+  }
+  return results;
+}
+
+async function listEmailIdsForAccount(email, afterDate, filters = {}) {
+  const auth = buildAuth(email);
+  const gmailClient = google.gmail({ version: 'v1', auth });
+
+  const query = buildQuery(afterDate, filters);
+  const ids = [];
   let pageToken;
 
   do {
-    const res = await gmail.users.messages.list({
+    const res = await gmailClient.users.messages.list({
       userId: 'me',
       q: query,
       maxResults: 500,
+      fields: 'messages/id,nextPageToken',
       ...(pageToken ? { pageToken } : {}),
     });
 
-    const messages = res.data.messages || [];
-    for (const { id } of messages) {
-      const detail = await gmail.users.messages.get({
-        userId: 'me',
-        id,
-        format: 'full',
-      });
-      emails.push(parseMessage(detail.data));
-    }
-
+    (res.data.messages || []).forEach(({ id }) => ids.push(id));
     pageToken = res.data.nextPageToken;
   } while (pageToken);
 
-  return emails;
+  return ids;
 }
 
-module.exports = { fetchEmailsForAccount, getAccountDir, SCOPES };
+async function fetchEmailsByIds(email, ids) {
+  if (ids.length === 0) return [];
+  const auth = buildAuth(email);
+  const gmailClient = google.gmail({ version: 'v1', auth });
+  return fetchMessageDetails(gmailClient, ids);
+}
+
+module.exports = { listEmailIdsForAccount, fetchEmailsByIds, buildQuery, getAccountDir, SCOPES };

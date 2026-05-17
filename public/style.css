@@ -44,7 +44,6 @@ body {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
-  margin-bottom: 32px;
 }
 .card {
   background: var(--surface);
@@ -72,31 +71,52 @@ body {
 #card-expenses .card-value { color: var(--red); }
 #card-balance .card-value.negative { color: var(--red); }
 
-/* Latest Email */
-.latest-email-section {
-  margin-bottom: 28px;
+/* Month picker */
+.dashboard-section {
+  margin-bottom: 32px;
 }
-.latest-email-card {
+.dashboard-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.month-picker-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
+  border-radius: 8px;
+  padding: 6px 12px;
   box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  cursor: pointer;
 }
-.latest-email-subject {
-  font-size: 15px;
+.month-picker-wrap:hover {
+  border-color: var(--blue);
+}
+.calendar-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--blue);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.month-picker {
+  border: none;
+  background: transparent;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+  font-family: inherit;
 }
-.latest-email-meta {
-  font-size: 12px;
-  color: var(--text-muted);
+.month-picker::-webkit-calendar-picker-indicator {
+  display: none;
+}
+.dashboard {
+  margin-bottom: 0;
 }
 
 /* Form section */
@@ -109,7 +129,8 @@ body {
   box-shadow: var(--shadow);
 }
 .form-section h2,
-.list-section h2 {
+.list-section h2,
+.list-header h2 {
   font-size: 17px;
   font-weight: 600;
   margin-bottom: 18px;
@@ -193,6 +214,41 @@ body {
   transition: background 0.15s;
 }
 .btn-primary:hover { background: #2b6cb0; }
+
+/* Transaction list header + filters */
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.list-header h2 {
+  margin-bottom: 0;
+}
+.tx-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.filter-select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.filter-select:focus,
+.filter-select:hover {
+  border-color: var(--blue);
+}
 
 /* Transaction list */
 .list-section {
