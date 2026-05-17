@@ -1,9 +1,12 @@
-const form          = document.getElementById('transaction-form');
-const amountError   = document.getElementById('amount-error');
-const listEl        = document.getElementById('transaction-list');
-const overlay       = document.getElementById('confirm-overlay');
-const confirmBtn    = document.getElementById('confirm-delete-btn');
-const cancelBtn     = document.getElementById('cancel-delete-btn');
+const form           = document.getElementById('transaction-form');
+const amountError    = document.getElementById('amount-error');
+const listEl         = document.getElementById('transaction-list');
+const overlay        = document.getElementById('confirm-overlay');
+const confirmBtn     = document.getElementById('confirm-delete-btn');
+const cancelBtn      = document.getElementById('cancel-delete-btn');
+const monthPicker    = document.getElementById('month-picker');
+const filterCategory = document.getElementById('filter-category');
+const filterType     = document.getElementById('filter-type');
 
 let pendingDeleteId = null;
 
@@ -18,10 +21,20 @@ function fmtDate(dateStr) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function getSelectedMonthYear() {
+  if (monthPicker.value) {
+    const [y, m] = monthPicker.value.split('-');
+    return { year: y, month: parseInt(m) };
+  }
+  const now = new Date();
+  return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 async function refreshDashboard() {
-  const data = await fetch('/api/summary').then(r => r.json());
+  const { year, month } = getSelectedMonthYear();
+  const data = await fetch(`/api/summary?year=${year}&month=${month}`).then(r => r.json());
 
   const balanceEl = document.getElementById('total-balance');
   balanceEl.textContent = fmt(data.totalBalance);
@@ -35,7 +48,8 @@ async function refreshDashboard() {
 
 function renderTransactions(transactions) {
   if (transactions.length === 0) {
-    listEl.innerHTML = '<p class="empty-state">No transactions yet. Add one above.</p>';
+    const hasFilter = filterCategory.value !== 'all' || filterType.value !== 'all';
+    listEl.innerHTML = `<p class="empty-state">${hasFilter ? 'No transactions match the selected filters.' : 'No transactions yet. Add one above.'}</p>`;
     return;
   }
 
@@ -57,24 +71,18 @@ function renderTransactions(transactions) {
 }
 
 async function refreshList() {
-  const transactions = await fetch('/api/transactions').then(r => r.json());
+  const { year, month } = getSelectedMonthYear();
+  const params = new URLSearchParams({ year, month });
+  const category = filterCategory.value;
+  const type = filterType.value;
+  if (category !== 'all') params.set('category', category);
+  if (type !== 'all') params.set('type', type);
+  const transactions = await fetch(`/api/transactions?${params}`).then(r => r.json());
   renderTransactions(transactions);
 }
 
-async function refreshLatestEmail() {
-  try {
-    const data = await fetch('/api/last-email').then(r => r.json());
-    document.getElementById('latest-email-subject').textContent = data.subject || '(no subject)';
-    document.getElementById('latest-email-meta').textContent = data.from
-      ? `${data.from}  ·  ${data.date}`
-      : '';
-  } catch {
-    document.getElementById('latest-email-subject').textContent = 'Unable to load';
-  }
-}
-
 async function refreshAll() {
-  await Promise.all([refreshDashboard(), refreshList(), refreshLatestEmail()]);
+  await Promise.all([refreshDashboard(), refreshList()]);
 }
 
 // ── Add Transaction ───────────────────────────────────────────────────────────
@@ -147,5 +155,15 @@ confirmBtn.addEventListener('click', async () => {
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+
+const now = new Date();
+monthPicker.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+monthPicker.addEventListener('change', refreshAll);
+filterCategory.addEventListener('change', refreshList);
+filterType.addEventListener('change', refreshList);
+
+document.querySelector('.month-picker-wrap').addEventListener('click', () => {
+  monthPicker.showPicker();
+});
 
 refreshAll();

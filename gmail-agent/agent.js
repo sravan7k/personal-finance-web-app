@@ -3,8 +3,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const fs = require('fs');
 const path = require('path');
 const db = require('../db');
-const { fetchEmailsForAccount } = require('./gmail');
-const { classifyEmail } = require('./classifier');
+const { listEmailIdsForAccount, fetchEmailsByIds } = require('./gmail');
+const { classifyEmailsBatch } = require('./classifier');
 const { getLastRunTime, setLastRunTime, isEmailProcessed, markEmailProcessed } = require('./state');
 
 function loadConfig() {
@@ -20,9 +20,12 @@ function startOfCurrentMonth() {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
-// Small delay between Claude API calls to avoid bursting rate limits
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function isLikelyTransaction(email, filters) {
+  const { senderDomains = [], subjectKeywords = [] } = filters;
+  const from = email.from.toLowerCase();
+  const subject = email.subject.toLowerCase();
+  return senderDomains.some((d) => from.includes(d.toLowerCase())) ||
+         subjectKeywords.some((k) => subject.includes(k.toLowerCase()));
 }
 
 async function runAgent() {
@@ -42,6 +45,8 @@ async function runAgent() {
     return;
   }
 
+  const filters = config.filters ?? {};
+
   const lastRunTime = getLastRunTime();
   let afterDate;
 
@@ -58,40 +63,72 @@ async function runAgent() {
     'INSERT INTO transactions (type, amount, category, date, note, recurring) VALUES (?, ?, ?, ?, ?, 0)'
   );
 
-  let totalEmails = 0;
-  let totalSkipped = 0;
+  let totalNew = 0;
+  let totalAlreadyProcessed = 0;
+  let totalFilteredOut = 0;
   let totalTransactions = 0;
 
   for (const account of accounts) {
     console.log(`[Gmail Agent] Processing account: ${account}`);
 
-    let emails;
+    // Step 1: Get all matching email IDs from Gmail (cheap list call)
+    let allIds;
     try {
-      emails = await fetchEmailsForAccount(account, afterDate);
+      allIds = await listEmailIdsForAccount(account, afterDate, filters);
     } catch (err) {
-      console.error(`[Gmail Agent] Failed to fetch emails for ${account}: ${err.message}`);
+      console.error(`[Gmail Agent] Failed to list emails for ${account}: ${err.message}`);
       continue;
     }
 
-    console.log(`[Gmail Agent] ${emails.length} emails fetched for ${account}`);
+    // Step 2: Filter out already-processed IDs before fetching full details
+    const newIds = allIds.filter((id) => !isEmailProcessed(id));
+    totalAlreadyProcessed += allIds.length - newIds.length;
+    console.log(
+      `[Gmail Agent] ${allIds.length} emails found, ${newIds.length} new, ` +
+      `${allIds.length - newIds.length} already processed`
+    );
 
+    if (newIds.length === 0) continue;
+
+    // Step 3: Fetch full details only for new emails
+    let emails;
+    try {
+      emails = await fetchEmailsByIds(account, newIds);
+    } catch (err) {
+      console.error(`[Gmail Agent] Failed to fetch email details for ${account}: ${err.message}`);
+      continue;
+    }
+
+    // Step 4: Client-side filter — confirm sender domain or subject keyword match
+    const toClassify = [];
     for (const email of emails) {
-      if (isEmailProcessed(email.id)) {
-        totalSkipped++;
-        continue;
+      if (isLikelyTransaction(email, filters)) {
+        toClassify.push(email);
+      } else {
+        markEmailProcessed(email.id);
+        totalFilteredOut++;
       }
+    }
 
-      totalEmails++;
-      let result;
+    console.log(
+      `[Gmail Agent] ${toClassify.length} emails to classify, ` +
+      `${totalFilteredOut} skipped by client-side filter`
+    );
 
-      try {
-        result = await classifyEmail(email);
-        await sleep(4000); // 15 RPM free tier limit → 1 request per 4 seconds
-      } catch (err) {
-        console.error(`[Gmail Agent] Classifier error on email ${email.id}: ${err.message}`);
-        markEmailProcessed(email.id); // skip on next run so one bad email doesn't block forever
-        continue;
-      }
+    if (toClassify.length === 0) continue;
+
+    // Step 5: Batch classify with Claude (50% cheaper than sequential calls)
+    let results;
+    try {
+      results = await classifyEmailsBatch(toClassify);
+    } catch (err) {
+      console.error(`[Gmail Agent] Batch classification failed: ${err.message}`);
+      continue;
+    }
+
+    // Step 6: Insert transactions and mark all classified emails as processed
+    for (const email of toClassify) {
+      const result = results.get(email.id) ?? { isTransaction: false };
 
       if (result.isTransaction && typeof result.amount === 'number' && result.amount > 0) {
         const type = result.type === 'income' ? 'income' : 'expense';
@@ -108,13 +145,15 @@ async function runAgent() {
       }
 
       markEmailProcessed(email.id);
+      totalNew++;
     }
   }
 
   setLastRunTime(new Date().toISOString());
 
   console.log(
-    `[Gmail Agent] ─── Done: ${totalEmails} emails classified, ${totalTransactions} transactions added, ${totalSkipped} already-processed skipped`
+    `[Gmail Agent] ─── Done: ${totalNew} emails classified, ${totalTransactions} transactions added, ` +
+    `${totalFilteredOut} skipped by client filter, ${totalAlreadyProcessed} already processed`
   );
 }
 

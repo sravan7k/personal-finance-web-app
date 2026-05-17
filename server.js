@@ -15,5 +15,7 @@ app.use('/api/last-email',   require('./routes/last-email'));
 
 app.listen(PORT, () => {
   console.log(`Personal Finance App running at http://localhost:${PORT}`);
-  require('./gmail-agent/scheduler').startScheduler();
+  require('./gmail-agent/agent').runAgent().catch((err) => {
+    console.error('[Gmail Agent] Startup run failed:', err.message);
+  });
 });

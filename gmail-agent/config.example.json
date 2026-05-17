@@ -2,5 +2,33 @@
   "accounts": [
     "you@gmail.com",
     "work@gmail.com"
-  ]
+  ],
+  "filters": {
+    "senderDomains": [
+      "hdfcbank.net", "hdfcbank.com",
+      "icicibank.com",
+      "sbi.co.in",
+      "axisbank.com",
+      "kotak.com",
+      "yesbank.in",
+      "indusind.com",
+      "bankofbaroda.com",
+      "pnbindia.in",
+      "canarabank.com",
+      "federalbank.co.in",
+      "idfcfirstbank.com",
+      "rbl.co.in",
+      "phonepe.com",
+      "paytm.com",
+      "cred.club",
+      "razorpay.com",
+      "amazon.in",
+      "gpay.com"
+    ],
+    "subjectKeywords": [
+      "debited", "credited", "transaction", "payment received",
+      "payment successful", "transfer", "UPI", "NEFT", "RTGS", "IMPS",
+      "EMI", "salary", "refund", "cashback", "auto-debit"
+    ]
+  }
 }
